@@ -1,4 +1,7 @@
 /DATA_ROOT/*
 
 /dataset/*
-!/dataset/
+
+/checkpoints/*
+
+__pycache__/

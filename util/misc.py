@@ -22,7 +22,8 @@ from torch.autograd import Variable
 
 # needed due to empty tensor bug in pytorch and torchvision 0.5
 import torchvision
-if float(torchvision.__version__[:3]) < 0.7:
+# Fixed "Error in checking torchvision.__version__ with double digits"
+if float(torchvision.__version__.split('.')[1]) < 7:
     from torchvision.ops import _new_empty_tensor
     from torchvision.ops.misc import _output_size
 
@@ -274,6 +275,7 @@ def collate_fn(batch):
     batch[0] = nested_tensor_from_tensor_list(batch[0])
     return tuple(batch)
 
+
 def collate_fn_crowd(batch):
     # re-organize the batch
     batch_new = []
@@ -297,6 +299,7 @@ def _max_by_axis(the_list):
             maxes[index] = max(maxes[index], item)
     return maxes
 
+
 def _max_by_axis_pad(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]
@@ -307,7 +310,7 @@ def _max_by_axis_pad(the_list):
     block = 128
 
     for i in range(2):
-        maxes[i+1] = ((maxes[i+1] - 1) // block + 1) * block
+        maxes[i + 1] = ((maxes[i + 1] - 1) // block + 1) * block
     return maxes
 
 
@@ -328,6 +331,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError('not supported')
     return tensor
+
 
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
@@ -447,7 +451,7 @@ def interpolate(input, size=None, scale_factor=None, mode="nearest", align_corne
     This will eventually be supported natively by PyTorch, and this
     class can go away.
     """
-    if float(torchvision.__version__[:3]) < 0.7:
+    if float(torchvision.__version__.split('.')[1]) < 7:
         if input.numel() > 0:
             return torch.nn.functional.interpolate(
                 input, size, scale_factor, mode, align_corners
@@ -479,6 +483,7 @@ class FocalLoss(nn.Module):
 
 
     """
+
     def __init__(self, class_num, alpha=None, gamma=2, size_average=True):
         super(FocalLoss, self).__init__()
         if alpha is None:
@@ -506,10 +511,10 @@ class FocalLoss(nn.Module):
             self.alpha = self.alpha.cuda()
         alpha = self.alpha[ids.data.view(-1)]
 
-        probs = (P*class_mask).sum(1).view(-1,1)
+        probs = (P * class_mask).sum(1).view(-1, 1)
 
         log_p = probs.log()
-        batch_loss = -alpha*(torch.pow((1-probs), self.gamma))*log_p
+        batch_loss = -alpha * (torch.pow((1 - probs), self.gamma)) * log_p
 
         if self.size_average:
             loss = batch_loss.mean()
