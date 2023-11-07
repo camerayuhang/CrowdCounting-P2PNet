@@ -11,6 +11,9 @@ from torch import nn
 
 import models.vgg_ as models
 
+# 4个body的backbone
+
+
 class BackboneBase_VGG(nn.Module):
     def __init__(self, backbone: nn.Module, num_channels: int, name: str, return_interm_layers: bool):
         super().__init__()
@@ -20,7 +23,7 @@ class BackboneBase_VGG(nn.Module):
                 self.body1 = nn.Sequential(*features[:13])
                 self.body2 = nn.Sequential(*features[13:23])
                 self.body3 = nn.Sequential(*features[23:33])
-                self.body4 = nn.Sequential(*features[33:43])
+                self.body4 = nn.Sequential(*features[33:43])  # 4个body加起来有4个max pooling, 16x down-sample
             else:
                 self.body1 = nn.Sequential(*features[:9])
                 self.body2 = nn.Sequential(*features[9:16])
@@ -35,6 +38,15 @@ class BackboneBase_VGG(nn.Module):
         self.return_interm_layers = return_interm_layers
 
     def forward(self, tensor_list):
+        """
+        backbone consists of 4 bodys, output a list containing each body's output
+
+        Args:
+            tensor_list (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         out = []
 
         if self.return_interm_layers:
@@ -51,6 +63,7 @@ class BackboneBase_VGG(nn.Module):
 
 class Backbone_VGG(BackboneBase_VGG):
     """ResNet backbone with frozen BatchNorm."""
+
     def __init__(self, name: str, return_interm_layers: bool):
         if name == 'vgg16_bn':
             backbone = models.vgg16_bn(pretrained=True)
@@ -63,6 +76,7 @@ class Backbone_VGG(BackboneBase_VGG):
 def build_backbone(args):
     backbone = Backbone_VGG(args.backbone, True)
     return backbone
+
 
 if __name__ == '__main__':
     Backbone_VGG('vgg16', True)

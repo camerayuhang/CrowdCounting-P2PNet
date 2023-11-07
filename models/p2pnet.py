@@ -31,7 +31,7 @@ class RegressionModel(nn.Module):
         self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
         self.act4 = nn.ReLU()
 
-        self.output = nn.Conv2d(feature_size, num_anchor_points * 2, kernel_size=3, padding=1)
+        self.output = nn.Conv2d(feature_size, num_anchor_points * 2, kernel_size=3, padding=1)  # 最后的每个cell也是输出一个vector，向量是每个点的offset，不是坐标，所以要乘上2
     # sub-branch forward
 
     def forward(self, x):
@@ -43,9 +43,10 @@ class RegressionModel(nn.Module):
 
         out = self.output(out)
 
-        out = out.permute(0, 2, 3, 1)
+        out = out.permute(0, 2, 3, 1)  # [batch_szie, width, height, 4*2] 每个cell预测4个点
 
-        return out.contiguous().view(out.shape[0], -1, 2)
+        return out.contiguous().view(out.shape[0], -1, 2)  # [batch_szie, new_length, 2] 把最后的feature 弄平，即每个cell的预测点都排到一起，所以，
+        # new_length = width * height * 4
 
 # the network frmawork of the classification branch
 
@@ -54,7 +55,7 @@ class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchor_points=4, num_classes=80, prior=0.01, feature_size=256):
         super(ClassificationModel, self).__init__()
 
-        self.num_classes = num_classes
+        self.num_classes = num_classes  # 是人与不是人，所以num_class=2
         self.num_anchor_points = num_anchor_points
 
         self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
@@ -82,13 +83,13 @@ class ClassificationModel(nn.Module):
 
         out = self.output(out)
 
-        out1 = out.permute(0, 2, 3, 1)
+        out1 = out.permute(0, 2, 3, 1)  # [batch_szie, width, height, 4*2] 每个cell预测4个点,在classification中，每个点，由是人与不是人组合，应该是这样的
 
         batch_size, width, height, _ = out1.shape
 
-        out2 = out1.view(batch_size, width, height, self.num_anchor_points, self.num_classes)
+        out2 = out1.view(batch_size, width, height, self.num_anchor_points, self.num_classes)  # [batch_szie, width, height, 4, 2]
 
-        return out2.contiguous().view(x.shape[0], -1, self.num_classes)
+        return out2.contiguous().view(x.shape[0], -1, self.num_classes)  # [batch_size, width*height*4, 2]
 
 # generate the reference points in grid layout
 
@@ -140,13 +141,13 @@ class AnchorPoints(nn.Module):
             self.pyramid_levels = pyramid_levels
 
         if strides is None:
-            self.strides = [2 ** x for x in self.pyramid_levels]
+            self.strides = [2 ** x for x in self.pyramid_levels]  # 8 应该指的是图像缩小了8倍
 
         self.row = row
         self.line = line
 
     def forward(self, image):
-        image_shape = image.shape[2:]
+        image_shape = image.shape[2:]  # image width and height
         image_shape = np.array(image_shape)
         image_shapes = [(image_shape + 2 ** x - 1) // (2 ** x) for x in self.pyramid_levels]
 
@@ -207,6 +208,15 @@ class Decoder(nn.Module):
 
 class P2PNet(nn.Module):
     def __init__(self, backbone, row=2, line=2):
+        """
+        1. backbone: output 4 element list 
+        2. RegressionModel: outout a feature map with shape of [batchsize, width*height*num_anchor_points, 2], num_anchor_points equals 2 in paper
+        3. ClassificationModel: outout a feature map with shape of [batchsize, width*height*num_anchor_points, 2], 2 means the probability of wthether there exists people
+        Args:
+            backbone (_type_): _description_
+            row (int, optional): _description_. Defaults to 2.
+            line (int, optional): _description_. Defaults to 2.
+        """
         super().__init__()
         self.backbone = backbone
         self.num_classes = 2
