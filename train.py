@@ -15,6 +15,7 @@ from tensorboardX import SummaryWriter
 import warnings
 warnings.filterwarnings('ignore')
 
+
 def get_args_parser():
     parser = argparse.ArgumentParser('Set parameters for training P2PNet', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
@@ -55,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--dataset_file', default='SHHA')
     parser.add_argument('--data_root', default='./new_public_density_data',
                         help='path where the dataset is')
-    
+
     parser.add_argument('--output_dir', default='./log',
                         help='path where to save, empty for no saving')
     parser.add_argument('--checkpoints_dir', default='./ckpt',
@@ -74,6 +75,7 @@ def get_args_parser():
     parser.add_argument('--gpu_id', default=0, type=int, help='the gpu used for training')
 
     return parser
+
 
 def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(args.gpu_id)
@@ -130,7 +132,7 @@ def main(args):
                                    collate_fn=utils.collate_fn_crowd, num_workers=args.num_workers)
 
     data_loader_val = DataLoader(val_set, 1, sampler=sampler_val,
-                                    drop_last=False, collate_fn=utils.collate_fn_crowd, num_workers=args.num_workers)
+                                 drop_last=False, collate_fn=utils.collate_fn_crowd, num_workers=args.num_workers)
 
     if args.frozen_weights is not None:
         checkpoint = torch.load(args.frozen_weights, map_location='cpu')
@@ -151,7 +153,7 @@ def main(args):
     mse = []
     # the logger writer
     writer = SummaryWriter(args.tensorboard_dir)
-    
+
     step = 0
     # training starts here
     for epoch in range(args.start_epoch, args.epochs):
@@ -165,12 +167,12 @@ def main(args):
             with open(run_log_name, "a") as log_file:
                 log_file.write("loss/loss@{}: {}".format(epoch, stat['loss']))
                 log_file.write("loss/loss_ce@{}: {}".format(epoch, stat['loss_ce']))
-                
+
             writer.add_scalar('loss/loss', stat['loss'], epoch)
             writer.add_scalar('loss/loss_ce', stat['loss_ce'], epoch)
 
         t2 = time.time()
-        print('[ep %d][lr %.7f][%.2fs]' % \
+        print('[ep %d][lr %.7f][%.2fs]' %
               (epoch, optimizer.param_groups[0]['lr'], t2 - t1))
         with open(run_log_name, "a") as log_file:
             log_file.write('[ep %d][lr %.7f][%.2fs]' % (epoch, optimizer.param_groups[0]['lr'], t2 - t1))
@@ -193,8 +195,8 @@ def main(args):
             print('=======================================test=======================================')
             print("mae:", result[0], "mse:", result[1], "time:", t2 - t1, "best mae:", np.min(mae), )
             with open(run_log_name, "a") as log_file:
-                log_file.write("mae:{}, mse:{}, time:{}, best mae:{}".format(result[0], 
-                                result[1], t2 - t1, np.min(mae)))
+                log_file.write("mae:{}, mse:{}, time:{}, best mae:{}".format(result[0],
+                                                                             result[1], t2 - t1, np.min(mae)))
             print('=======================================test=======================================')
             # recored the evaluation results
             if writer is not None:
@@ -215,6 +217,7 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('P2PNet training and evaluation script', parents=[get_args_parser()])

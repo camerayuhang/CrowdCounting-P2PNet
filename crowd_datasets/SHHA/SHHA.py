@@ -2,17 +2,19 @@ import os
 import random
 import torch
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as standard_transforms
 from PIL import Image
 import cv2
 import glob
 import scipy.io as io
 
+
 class SHHA(Dataset):
     def __init__(self, data_root, transform=None, train=False, patch=False, flip=False):
         self.root_path = data_root
-        self.train_lists = "shanghai_tech_part_a_train.list"
-        self.eval_list = "shanghai_tech_part_a_test.list"
+        self.train_lists = "train.list"
+        self.eval_list = "test.list"
         # there may exist multiple list files
         self.img_list_file = self.train_lists.split(',')
         if train:
@@ -27,15 +29,15 @@ class SHHA(Dataset):
             train_list = train_list.strip()
             with open(os.path.join(self.root_path, train_list)) as fin:
                 for line in fin:
-                    if len(line) < 2: 
+                    if len(line) < 2:
                         continue
                     line = line.strip().split()
                     self.img_map[os.path.join(self.root_path, line[0].strip())] = \
-                                    os.path.join(self.root_path, line[1].strip())
+                        os.path.join(self.root_path, line[1].strip())
         self.img_list = sorted(list(self.img_map.keys()))
         # number of samples
         self.nSamples = len(self.img_list)
-        
+
         self.transform = transform
         self.train = train
         self.patch = patch
@@ -50,6 +52,7 @@ class SHHA(Dataset):
         img_path = self.img_list[index]
         gt_path = self.img_map[img_path]
         # load image and ground truth
+        # 图像 ， 人头点的列表
         img, point = load_data((img_path, gt_path), self.train)
         # applu augumentation
         if self.transform is not None:
@@ -62,16 +65,16 @@ class SHHA(Dataset):
             scale = random.uniform(*scale_range)
             # scale the image and points
             if scale * min_size > 128:
-                img = torch.nn.functional.upsample_bilinear(img.unsqueeze(0), scale_factor=scale).squeeze(0)
+                img = torch.nn.functional.upsample_bilinear(img.unsqueeze(0), scale_factor=scale).squeeze(0)  # 这种向上采样，需要4-d tensor
                 point *= scale
         # random crop augumentaiton
         if self.train and self.patch:
-            img, point = random_crop(img, point)
+            img, point = random_crop(img, point)  # 裁剪成4个crop，所以point会有4个元素
             for i, _ in enumerate(point):
                 point[i] = torch.Tensor(point[i])
         # random flipping
         if random.random() > 0.5 and self.train and self.flip:
-            # random flip
+            # random flip 水平转换的话，point也得转换，细节就不了解，反正就是这样的原理 0.5概率水平转换
             img = torch.Tensor(img[:, :, :, ::-1].copy())
             for i, _ in enumerate(point):
                 point[i][:, 0] = 128 - point[i][:, 0]
@@ -81,13 +84,13 @@ class SHHA(Dataset):
 
         img = torch.Tensor(img)
         # pack up related infos
-        target = [{} for i in range(len(point))]
+        target = [{} for i in range(len(point))]  # target里，是每一个对象，对象的数量与crop数量相同
         for i, _ in enumerate(point):
-            target[i]['point'] = torch.Tensor(point[i])
+            target[i]['point'] = torch.Tensor(point[i])  # 代表每个点在crop的位置
             image_id = int(img_path.split('/')[-1].split('.')[0].split('_')[-1])
             image_id = torch.Tensor([image_id]).long()
             target[i]['image_id'] = image_id
-            target[i]['labels'] = torch.ones([point[i].shape[0]]).long()
+            target[i]['labels'] = torch.ones([point[i].shape[0]]).long()  # label代表这个点确实是人头的概率，在数据集中，肯定为1
 
         return img, target
 
@@ -108,6 +111,8 @@ def load_data(img_gt_path, train):
     return img, np.array(points)
 
 # random crop augumentation
+
+
 def random_crop(img, den, num_patch=4):
     half_h = 128
     half_w = 128
@@ -115,19 +120,35 @@ def random_crop(img, den, num_patch=4):
     result_den = []
     # crop num_patch for each image
     for i in range(num_patch):
-        start_h = random.randint(0, img.size(1) - half_h)
+        start_h = random.randint(0, img.size(1) - half_h)  # 要减去128，不然start_h很大就不够裁剪
         start_w = random.randint(0, img.size(2) - half_w)
         end_h = start_h + half_h
         end_w = start_w + half_w
         # copy the cropped rect
         result_img[i] = img[:, start_h:end_h, start_w:end_w]
         # copy the cropped points
-        idx = (den[:, 0] >= start_w) & (den[:, 0] <= end_w) & (den[:, 1] >= start_h) & (den[:, 1] <= end_h)
+        idx = (den[:, 0] >= start_w) & (den[:, 0] <= end_w) & (den[:, 1] >= start_h) & (den[:, 1] <= end_h)  # 点集的横坐标在范围内，纵坐标也在范围内，下标才为true
         # shift the corrdinates
         record_den = den[idx]
-        record_den[:, 0] -= start_w
+        record_den[:, 0] -= start_w  # point数值调整为相对于crop
         record_den[:, 1] -= start_h
 
         result_den.append(record_den)
 
     return result_img, result_den
+
+
+if __name__ == '__main__':
+    data_root = os.path.join(os.path.dirname(__file__), "../../DATA_ROOT")
+    # the pre-proccssing transform
+    transform = standard_transforms.Compose([
+        standard_transforms.ToTensor(),
+        standard_transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                      std=[0.229, 0.224, 0.225]),
+    ])
+    # create the training dataset
+    train_set = SHHA(data_root, train=True, transform=transform, patch=True, flip=True)
+    # create the validation dataset
+    val_set = SHHA(data_root, train=False, transform=transform)
+    print(train_set[0])
+    print(len(val_set))

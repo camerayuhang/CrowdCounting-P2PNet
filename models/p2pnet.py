@@ -13,6 +13,8 @@ import numpy as np
 import time
 
 # the network frmawork of the regression branch
+
+
 class RegressionModel(nn.Module):
     def __init__(self, num_features_in, num_anchor_points=4, feature_size=256):
         super(RegressionModel, self).__init__()
@@ -31,6 +33,7 @@ class RegressionModel(nn.Module):
 
         self.output = nn.Conv2d(feature_size, num_anchor_points * 2, kernel_size=3, padding=1)
     # sub-branch forward
+
     def forward(self, x):
         out = self.conv1(x)
         out = self.act1(out)
@@ -45,6 +48,8 @@ class RegressionModel(nn.Module):
         return out.contiguous().view(out.shape[0], -1, 2)
 
 # the network frmawork of the classification branch
+
+
 class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchor_points=4, num_classes=80, prior=0.01, feature_size=256):
         super(ClassificationModel, self).__init__()
@@ -67,6 +72,7 @@ class ClassificationModel(nn.Module):
         self.output = nn.Conv2d(feature_size, num_anchor_points * num_classes, kernel_size=3, padding=1)
         self.output_act = nn.Sigmoid()
     # sub-branch forward
+
     def forward(self, x):
         out = self.conv1(x)
         out = self.act1(out)
@@ -85,6 +91,8 @@ class ClassificationModel(nn.Module):
         return out2.contiguous().view(x.shape[0], -1, self.num_classes)
 
 # generate the reference points in grid layout
+
+
 def generate_anchor_points(stride=16, row=3, line=3):
     row_step = stride / row
     line_step = stride / line
@@ -100,6 +108,8 @@ def generate_anchor_points(stride=16, row=3, line=3):
 
     return anchor_points
 # shift the meta-anchor to get an acnhor points
+
+
 def shift(shape, stride, anchor_points):
     shift_x = (np.arange(0, shape[1]) + 0.5) * stride
     shift_y = (np.arange(0, shape[0]) + 0.5) * stride
@@ -118,6 +128,8 @@ def shift(shape, stride, anchor_points):
     return all_anchor_points
 
 # this class generate all reference points on all pyramid levels
+
+
 class AnchorPoints(nn.Module):
     def __init__(self, pyramid_levels=None, strides=None, row=3, line=3):
         super(AnchorPoints, self).__init__()
@@ -152,6 +164,7 @@ class AnchorPoints(nn.Module):
         else:
             return torch.from_numpy(all_anchor_points.astype(np.float32))
 
+
 class Decoder(nn.Module):
     def __init__(self, C3_size, C4_size, C5_size, feature_size=256):
         super(Decoder, self).__init__()
@@ -170,7 +183,6 @@ class Decoder(nn.Module):
         self.P3_1 = nn.Conv2d(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
         self.P3_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
         self.P3_2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-
 
     def forward(self, inputs):
         C3, C4, C5 = inputs
@@ -191,6 +203,8 @@ class Decoder(nn.Module):
         return [P3_x, P4_x, P5_x]
 
 # the defenition of the P2PNet model
+
+
 class P2PNet(nn.Module):
     def __init__(self, backbone, row=2, line=2):
         super().__init__()
@@ -200,9 +214,9 @@ class P2PNet(nn.Module):
         num_anchor_points = row * line
 
         self.regression = RegressionModel(num_features_in=256, num_anchor_points=num_anchor_points)
-        self.classification = ClassificationModel(num_features_in=256, \
-                                            num_classes=self.num_classes, \
-                                            num_anchor_points=num_anchor_points)
+        self.classification = ClassificationModel(num_features_in=256,
+                                                  num_classes=self.num_classes,
+                                                  num_anchor_points=num_anchor_points)
 
         self.anchor_points = AnchorPoints(pyramid_levels=[3,], row=row, line=line)
 
@@ -216,15 +230,16 @@ class P2PNet(nn.Module):
 
         batch_size = features[0].shape[0]
         # run the regression and classification branch
-        regression = self.regression(features_fpn[1]) * 100 # 8x
+        regression = self.regression(features_fpn[1]) * 100  # 8x
         classification = self.classification(features_fpn[1])
         anchor_points = self.anchor_points(samples).repeat(batch_size, 1, 1)
         # decode the points as prediction
         output_coord = regression + anchor_points
         output_class = classification
         out = {'pred_logits': output_class, 'pred_points': output_coord}
-       
+
         return out
+
 
 class SetCriterion_Crowd(nn.Module):
 
@@ -323,20 +338,24 @@ class SetCriterion_Crowd(nn.Module):
         return losses
 
 # create the P2PNet model
+
+
 def build(args, training):
     # treats persons as a single class
     num_classes = 1
 
     backbone = build_backbone(args)
     model = P2PNet(backbone, args.row, args.line)
-    if not training: 
+    if not training:
         return model
 
     weight_dict = {'loss_ce': 1, 'loss_points': args.point_loss_coef}
     losses = ['labels', 'points']
+    # 论文中的Proposal Matching
     matcher = build_matcher_crowd(args)
-    criterion = SetCriterion_Crowd(num_classes, \
-                                matcher=matcher, weight_dict=weight_dict, \
-                                eos_coef=args.eos_coef, losses=losses)
+    # 论文中的loss function consist of 2 loss，labels loss, points loss
+    criterion = SetCriterion_Crowd(num_classes,
+                                   matcher=matcher, weight_dict=weight_dict,
+                                   eos_coef=args.eos_coef, losses=losses)
 
     return model, criterion
